@@ -1,0 +1,222 @@
+.wrap {
+  max-width: 800px;
+}
+
+.title {
+  margin: 0 0 1rem;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tr:hover td {
+  background: var(--surface-hover);
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn {
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius);
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btnEdit {
+  background: rgba(167, 139, 250, 0.2);
+  color: var(--accent);
+}
+
+.btnEdit:hover {
+  background: rgba(167, 139, 250, 0.35);
+}
+
+.btnDelete {
+  background: rgba(248, 113, 113, 0.2);
+  color: var(--danger);
+}
+
+.btnDelete:hover {
+  background: rgba(248, 113, 113, 0.35);
+}
+
+.btnDelete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.loading,
+.error {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* Modal */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: var(--shadow);
+}
+
+.modalTitle {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.formGroup input,
+.formGroup select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.formGroup input:focus,
+.formGroup select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.modalActions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+
+.btnCancel {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.btnCancel:hover {
+  background: var(--border);
+}
+
+.btnSave {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btnSave:hover {
+  background: var(--accent-hover);
+}
+
+.btnSave:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.roleBadge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.roleAdmin {
+  background: rgba(248, 113, 113, 0.2);
+  color: var(--danger);
+}
+
+.roleModerator {
+  background: rgba(167, 139, 250, 0.2);
+  color: var(--accent);
+}
+
+.roleUser {
+  background: rgba(161, 161, 170, 0.2);
+  color: var(--text-muted);
+}
+
+.date {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.lastSeenActive {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.lastSeenNever {
+  color: var(--text-muted);
+  font-style: italic;
+}

@@ -1,0 +1,23 @@
+
+###
+GET http://localhost:5000/movies HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjE5YzVhZGExLTU4MDctNGJlMS1iOGQ2LWNjZTlmNzAwMjEyYyIsImVtYWlsIjoic2FhYWtAZ21haWwuY29tIiwicm9sZSI6InVzZXIiLCJpYXQiOjE3NzAwMjE2MDksImV4cCI6MTc3MDAyNTIwOX0.jEvVKSTPGJc57RSkEAZyKQvYcZ15KBZmZza5WLJcaNA
+
+### GET SINGLE ITEMS
+POST http://localhost:5000/login HTTP/1.1
+Content-Type: application/json
+
+{
+    "email": "saaak@gmail.com",
+    "password": "123"
+}
+
+###SEND REQ
+POST http://localhost:5000/register HTTP/1.1
+Content-Type: application/json
+
+{
+    "email": "saaak@gmail.com",
+    "password": "123"
+}

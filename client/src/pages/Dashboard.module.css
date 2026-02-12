@@ -1,0 +1,42 @@
+.dashboard {
+  max-width: 640px;
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.welcome {
+  margin: 0 0 1.5rem;
+  color: var(--text-muted);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+}
+
+.card h2 {
+  margin: 0 0 1rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.card ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.card a {
+  color: var(--accent);
+}
+
+.card a:hover {
+  text-decoration: underline;
+}
