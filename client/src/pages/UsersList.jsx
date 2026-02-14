@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import styles from "./UsersList.module.css";
+import { formatDate, formatLastSeen } from "../../libs/helper";
 
 const ROLES = ["user", "moderator", "admin"];
 
@@ -9,54 +10,6 @@ function roleClass(role) {
   if (role === "admin") return styles.roleAdmin;
   if (role === "moderator") return styles.roleModerator;
   return styles.roleUser;
-}
-
-function formatDate(iso) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function formatLastSeen(iso) {
-  if (!iso) return "recently";
-  try {
-    const now = new Date();
-    const lastSeen = new Date(iso);
-
-    // Check if date is valid
-    if (isNaN(lastSeen.getTime())) {
-      console.warn("Invalid lastSeen date:", iso);
-      return "Never";
-    }
-
-    const diffMs = now - lastSeen;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 0.5) return "recently online";
-    if (diffMins < 60) return `${diffMins} ${diffMins === 1 ? "minute" : "minutes"} ago`;
-    if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
-    if (diffDays < 7) return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
-
-    // For older dates, show formatted date
-    return lastSeen.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch (error) {
-    return "Never";
-  }
 }
 
 export default function UsersList() {
@@ -70,7 +23,6 @@ export default function UsersList() {
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
-  const [now, setNow] = useState(new Date()); // Force re-render for time updates
 
   const { socket } = useAuth();
 
@@ -92,47 +44,25 @@ export default function UsersList() {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Update "now" state every 30 seconds to trigger re-renders for relative time displays
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(new Date());
-    }, 30000); // Update every 30 seconds
-
-    return () => clearInterval(interval);
-  }, []);
-
   useEffect(() => {
     if (!socket) {
       return;
     }
-
-    const handleOnlineUpdate = (data) => {
-      const userId = typeof data === "string" ? data : data.userId;
-      const lastSeen = typeof data === "object" && data.lastSeen ? data.lastSeen : null;
+    socket.on("online-user-id", (data) => {
+      const userId = data.userId;
+      const lastSeen = data.lastSeen || null;
       editLastSeen(userId, "online", lastSeen);
-    };
+    });
 
-    const handleOfflineUpdate = (data) => {
-      const userId = typeof data === "string" ? data : data.userId;
-      const lastSeen = typeof data === "object" && data.lastSeen ? data.lastSeen : null;
+    socket.on("offline-user-id", (data) => {
+      const userId = data.userId;
+      const lastSeen = data.lastSeen || null;
       editLastSeen(userId, "offline", lastSeen);
-    };
-
-    const handleLastSeenUpdate = (data) => {
-      const userId = typeof data === "string" ? data : data.userId;
-      const lastSeen = typeof data === "object" && data.lastSeen ? data.lastSeen : null;
-      // This is for self-updates, treat as online
-      editLastSeen(userId, "online", lastSeen);
-    };
-
-    socket.on("online-user-id", handleOnlineUpdate);
-    socket.on("offline-user-id", handleOfflineUpdate);
-    socket.on("lastSeen-update", handleLastSeenUpdate);
+    });
 
     return () => {
-      socket.off("online-user-id", handleOnlineUpdate);
-      socket.off("offline-user-id", handleOfflineUpdate);
-      socket.off("lastSeen-update", handleLastSeenUpdate);
+      socket.off("online-user-id");
+      socket.off("offline-user-id");
     };
   }, [socket]);
 
@@ -147,16 +77,9 @@ export default function UsersList() {
   const editLastSeen = (id, status, lastSeenTimestamp = null) => {
     setUsers(prev => prev.map(user => {
       if (user.id === id) {
-        let lastSeenValue;
-        if (status === "online") {
-          lastSeenValue = "online";
-        } else if (lastSeenTimestamp) {
-          // If timestamp is provided, format it
-          lastSeenValue = lastSeenTimestamp;
-        } else {
-          // Fallback: use current timestamp if not provided
-          lastSeenValue = new Date().toISOString();
-        }
+        const lastSeenValue = status === "online"
+          ? "online"
+          : lastSeenTimestamp;
         return { ...user, lastSeen: lastSeenValue, isOnline: status === "online" };
       }
       return user;
@@ -233,18 +156,11 @@ export default function UsersList() {
                   <td className={styles.date}>{formatDate(user.createdAt)}</td>
                   <td className={styles.date}>
                     <span className={user.isOnline || user.lastSeen === "online" ? styles.lastSeenActive : styles.lastSeenNever}>
-                      {(() => {
-                        // Check if user is online
-                        if (user.isOnline || user.lastSeen === "online") {
-                          return "online";
-                        }
-                        // If lastSeen is a timestamp string, format it
-                        if (user.lastSeen && typeof user.lastSeen === "string" && user.lastSeen !== "online") {
-                          return formatLastSeen(user.lastSeen);
-                        }
-                        // Fallback
-                        return "Never";
-                      })()}
+                      {user.isOnline || user.lastSeen === "online"
+                        ? "online"
+                        : (user.lastSeen && user.lastSeen !== "online"
+                          ? formatLastSeen(user.lastSeen)
+                          : "Never")}
                     </span>
                   </td>
                   <td>

@@ -26,6 +26,7 @@
     "fastify-swagger": "^5.1.1",
     "fastify-swagger-ui": "^1.0.0",
     "ioredis": "^5.9.3",
+    "node-cron": "^4.2.1",
     "nodemon": "^3.1.11",
     "pg": "^8.18.0",
     "pg-hstore": "^2.3.4",

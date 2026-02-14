@@ -10,15 +10,22 @@ import { authRoutes } from "./routes/auth.js";
 import { moviesRoutes } from "./routes/movies.js";
 import { usersRoutes } from "./routes/users.js";
 import User from "./models/User.js";
-import { updateLastSeen, setUserOnline, setUserOffline, getLastSeen } from "./config/redis.js";
+import {
+  updateLastSeen,
+  setUserOnline,
+  setUserOffline,
+  getLastSeen,
+} from "./config/redis.js";
+import { syncLastSeenToDatabase } from "./jobs/syncLastSeen.js";
+import cron from "node-cron";
 
 const fastify = Fastify({ logger: true });
 
 const PORT = process.env.PORT;
 
 fastify.register(cors, {
-  origin: true, 
-  credentials: true
+  origin: true,
+  credentials: true,
 });
 fastify.register(jwt, {
   secret: "super-secret-change-me",
@@ -61,7 +68,6 @@ fastify.decorate("requireRoles", (allowedRoles) => {
   };
 });
 
-
 fastify.register(authRoutes);
 fastify.register(moviesRoutes);
 fastify.register(usersRoutes);
@@ -80,7 +86,16 @@ const start = async () => {
     await fastify.listen({ port: PORT || 3000, host: "0.0.0.0" });
  
     console.log(`🚀 Server running on http://localhost:${PORT || 3000}`);
-    
+
+    // Schedule daily sync of lastSeen from Redis to database
+    // Runs every day at 2:00 AM (configure timezone if needed)
+    cron.schedule("0 2 * * *", async () => {
+      await syncLastSeenToDatabase();
+    }, {
+      scheduled: true,
+      timezone: process.env.TZ || "UTC"
+    });
+    console.log("📅 Daily lastSeen sync scheduled (runs at 2:00 AM daily)");
 
     try {
       const { Server } = await import("socket.io");
@@ -88,26 +103,26 @@ const start = async () => {
         cors: {
           origin: true,
           credentials: true,
-          methods: ["GET", "POST"]
+          methods: ["GET", "POST"],
         },
-        transports: ["websocket", "polling"]
+        transports: ["websocket", "polling"],
       });
 
-
       io.use(async (socket, next) => {
-          try {
-            const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace("Bearer ", "");
-            
-            if (!token) {
+        try {
+          const token =
+            socket.handshake.auth.token ||
+            socket.handshake.headers.authorization?.replace("Bearer ", "");
+
+          if (!token) {
             return next(new Error("Authentication required"));
           }
-
 
           const decoded = await fastify.jwt.verify(token);
           socket.userId = decoded.id;
           socket.userEmail = decoded.email;
           socket.userRole = decoded.role;
-          
+
           next();
         } catch (error) {
           console.error("Socket.IO authentication failed:", error.message);
@@ -115,166 +130,54 @@ const start = async () => {
         }
       });
 
-      // Note: updateLastSeen, setUserOnline, and setUserOffline are imported from redis.js
-
-      // Socket.IO connection handler
       io.on("connection", async (socket) => {
         const userId = socket.userId;
         const userEmail = socket.userEmail;
         const userRole = socket.userRole;
-        
-        console.log("Socket.IO client connected:", socket.id, "User:", userEmail, "Role:", userRole);
 
+        console.log(
+          "Socket.IO client connected:",
+          socket.id,
+          "User:",
+          userEmail,
+          "Role:",
+          userRole,
+        );
 
-        // Join role-based room
         const roleRoom = `role:${userRole}`;
         socket.join(roleRoom);
         console.log(`User ${userEmail} joined room: ${roleRoom}`);
-        
-        // Log room members after join
-        const room = io.sockets.adapter.rooms.get(roleRoom);
-      
 
-        // Helper function to get room members
-        const getRoomMembers = (roomName) => {
-          const room = io.sockets.adapter.rooms.get(roomName);
-          if (!room) return [];
-      
-          // Get socket IDs in the room
-          const socketIds = Array.from(room);
-      
-          // Get user info for each socket
-          const members = socketIds.map(socketId => {
-            const socket = io.sockets.sockets.get(socketId);
-            if (socket) {
-              return {
-                socketId: socket.id,
-                userId: socket.userId,
-                userEmail: socket.userEmail,
-                userRole: socket.userRole
-              };
-            }
-            return null;
-          }).filter(Boolean);
-          
-          return members;
-        };
-
-        const getRoomMembersIds = (roomName) => {
-          const room = io.sockets.adapter.rooms.get(roomName);
-          if (!room) return [];
-      
-          // Get socket IDs in the room
-          const socketIds = Array.from(room);
-      
-          // Get user info for each socket
-          const memberIds = socketIds.map(socketId => {
-            const socket = io.sockets.sockets.get(socketId);
-            if (socket) {
-              return socket.userId
-            }
-            return null;
-          }).filter(Boolean);
-          
-          return memberIds;
-        };
-
-        const getOnlineUsersIds = () => { 
-         
-          const onlineUserIds = [];
-          io.sockets.adapter.rooms.forEach((sockets, roomName) => {
-            if (roomName.startsWith("role:")) {
-              onlineUserIds.push(...getRoomMembersIds(roomName));
-            }
-          });
-          return onlineUserIds;
-        }
-
-        // Handle request to get room members
-        socket.on("get-room-members", (roomName, callback) => {
-          const members = getRoomMembers(roomName);
-          // console.log(`Room ${roomName} has ${members.length} members:`, members);
-          callback(members);
-        });
-
-        // Handle request to get all rooms
-        socket.on("get-all-rooms", (callback) => {
-          const rooms = {};
-          const onlineUserIds = [];
-          io.sockets.adapter.rooms.forEach((sockets, roomName) => {
-            // Only include role-based rooms
-            if (roomName.startsWith("role:")) {
-              rooms[roomName] = getRoomMembers(roomName);
-              onlineUserIds.push(...getRoomMembersIds(roomName));
-            }
-          });
-          // console.log("All role-based rooms:", rooms);
-          callback(rooms, onlineUserIds);
-        });
-
-        // Mark user as online and update lastSeen in Redis when user connects
         await setUserOnline(userId);
         await updateLastSeen(userId);
 
-        // Store last activity time to throttle updates
-        let lastActivityUpdate = Date.now();
-        const ACTIVITY_THROTTLE_MS = 1000; // Only update every 1 second max for activity (faster feedback)
-
-        // Helper function to update lastSeen and notify admins
-        const updateAndNotify = async (source = "activity") => {
+        const heartbeatInterval = setInterval(async () => {
           await updateLastSeen(userId);
-          const lastSeenTimestamp = new Date().toISOString();
-          console.log(`[${source}] Updating lastSeen for user ${userId} (${userEmail})`);
-          // Emit to admin room AND to the user's own socket for self-updates
-          io.to("role:admin").emit("online-user-id", { userId, lastSeen: lastSeenTimestamp });
-          // Also emit to the user's own socket so they see their own status update
-          socket.emit("lastSeen-update", { userId, lastSeen: lastSeenTimestamp });
-        };
-        
-        // Hybrid approach: Activity-based updates + periodic heartbeat fallback
-        // 1. Handle user activity events (immediate updates)
-        socket.on("user-activity", async () => {
-          const now = Date.now();
-          // Throttle: only update if at least 1 second has passed since last activity update
-          if (now - lastActivityUpdate >= ACTIVITY_THROTTLE_MS) {
-            lastActivityUpdate = now;
-            await updateAndNotify("activity");
-          }
+        }, 60000);
+
+        // Notify admins that user is online
+        io.to("role:admin").emit("online-user-id", {
+          userId,
+          lastSeen: "online",
         });
 
-        // 2. Periodic heartbeat (fallback - every 60 seconds)
-        const heartbeatInterval = setInterval(async () => {
-          await updateAndNotify("heartbeat");
-        }, 60000); // Update every 60 seconds as fallback
-
-        // Store interval reference for cleanup
-        socket.heartbeatInterval = heartbeatInterval;
-
-        // Notify admins that user is online (initial connection)
-        const lastSeenTimestamp = new Date().toISOString();
-        io.to("role:admin").emit("online-user-id", { userId, lastSeen: lastSeenTimestamp });
-        // Also notify the user themselves
-        socket.emit("lastSeen-update", { userId, lastSeen: lastSeenTimestamp });
-
-        // Handle disconnection
         socket.on("disconnect", async (reason) => {
-          // Clear heartbeat interval
-          if (socket.heartbeatInterval) {
-            clearInterval(socket.heartbeatInterval);
-          }
-          
-          // Leave role-based room
+          clearInterval(heartbeatInterval);
+
           socket.leave(roleRoom);
           console.log(`User ${userEmail} left room: ${roleRoom}`);
-          
-          // 3. Update lastSeen on disconnect (final timestamp)
+
+          const lastSeenTimestamp = new Date().toISOString();
+
           await setUserOffline(userId);
 
-          // Get the lastSeen timestamp from Redis before notifying
-          const lastSeenTimestamp = await getLastSeen(userId);
+          await updateLastSeen(userId);
 
           // Notify admins that user is offline (send user data with lastSeen)
-          io.to("role:admin").emit("offline-user-id", { userId, lastSeen: lastSeenTimestamp });
+          io.to("role:admin").emit("offline-user-id", {
+            userId,
+            lastSeen: lastSeenTimestamp,
+          });
         });
 
         // Handle errors
@@ -285,7 +188,9 @@ const start = async () => {
 
       console.log(`Socket.IO available at http://localhost:${PORT || 3000}`);
     } catch (error) {
-      console.warn("Socket.IO not available. To enable Socket.IO, run: npm install socket.io");
+      console.warn(
+        "Socket.IO not available. To enable Socket.IO, run: npm install socket.io",
+      );
     }
   } catch (err) {
     fastify.log.error(err);

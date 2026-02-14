@@ -2,7 +2,25 @@ import {
   listUsersHandler,
   updateUserHandler,
   deleteUserHandler,
+  syncLastSeenHandler,
 } from "../controllers/users.js";
+import { syncLastSeenToDatabase } from "../jobs/syncLastSeen.js";
+
+const syncLastSeenOptions = {
+  schema: {
+    security: [{ bearerAuth: [] }],
+    response: {
+      200: {
+        type: "object",
+        properties: {
+          message: { type: "string" },
+          success: { type: "boolean" },
+        },
+      },
+    },
+  },
+  handler: syncLastSeenHandler,
+}
 
 const listOptions = {
   schema: {
@@ -92,6 +110,12 @@ export async function usersRoutes(fastify) {
   });
   fastify.delete("/users/:id", {
     ...deleteOptions,
+    preHandler: [fastify.authenticate, fastify.requireRoles(["admin"])],
+  });
+  
+  // Manual sync endpoint for admins
+  fastify.post("/users/sync-lastseen", {
+    ...syncLastSeenOptions,
     preHandler: [fastify.authenticate, fastify.requireRoles(["admin"])],
   });
 }

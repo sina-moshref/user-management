@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
 import { getLastSeenBatch, getOnlineStatusBatch } from "../config/redis.js";
+import { syncLastSeenToDatabase } from "../jobs/syncLastSeen.js";
 
 export async function listUsersHandler(request, reply) {
   const users = await User.findAll({
@@ -13,19 +14,10 @@ export async function listUsersHandler(request, reply) {
   const userIds = users.map((u) => u.id);
 
   // Fetch lastSeen and online status from Redis in parallel
-  // Wrap in try-catch to handle Redis connection errors gracefully
-  let lastSeenMap = {};
-  let onlineStatusMap = {};
-  
-  try {
-    [lastSeenMap, onlineStatusMap] = await Promise.all([
-      getLastSeenBatch(userIds),
-      getOnlineStatusBatch(userIds),
-    ]);
-  } catch (error) {
-    console.error("Error fetching lastSeen from Redis:", error.message);
-    // Continue with empty maps - users will show "Never" for lastSeen
-  }
+  const [lastSeenMap, onlineStatusMap] = await Promise.all([
+    getLastSeenBatch(userIds),
+    getOnlineStatusBatch(userIds),
+  ]);
 
   return {
     users: users.map((u) => {
@@ -84,4 +76,15 @@ export async function deleteUserHandler(request, reply) {
   if (!user) return reply.code(404).send({ error: "User not found" });
   await user.destroy();
   return { ok: true };
+}
+
+
+export async function syncLastSeenHandler(request, reply) {
+  try {
+    await syncLastSeenToDatabase();
+    return { success: true, message: "LastSeen sync completed successfully" };
+  } catch (error) {
+    console.error(error);
+    return reply.code(500).send({ success: false, error: "Failed to sync lastSeen data" });
+  }
 }
