@@ -13,33 +13,33 @@ export default function Dashboard() {
       return;
     }
 
-    const getRoomInfo = () => {
-      socket.emit("get-all-rooms", (rooms, onlineUserIds) => {
-        console.log("🔌 All rooms:", rooms);
-        console.log("🔌 Online user IDs:", onlineUserIds);
-      });
+    // const getRoomInfo = () => {
+    //   socket.emit("get-all-rooms", (rooms, onlineUserIds) => {
+    //     console.log("🔌 All rooms:", rooms);
+    //     console.log("🔌 Online user IDs:", onlineUserIds);
+    //   });
 
-      socket.emit("get-room-members", "role:admin", (members) => {
-        console.log("🔌 Admin members:", members);
-      });
-      socket.emit("get-room-members", "role:moderator", (members) => {
-        console.log("🔌 Moderator members:", members);
-      });
-      socket.emit("get-room-members", "role:user", (members) => {
-        console.log("🔌 User members:", members);
-      });
-    }
+    //   socket.emit("get-room-members", "role:admin", (members) => {
+    //     console.log("🔌 Admin members:", members);
+    //   });
+    //   socket.emit("get-room-members", "role:moderator", (members) => {
+    //     console.log("🔌 Moderator members:", members);
+    //   });
+    //   socket.emit("get-room-members", "role:user", (members) => {
+    //     console.log("🔌 User members:", members);
+    //   });
+    // }
 
     // If socket is already connected, get room info immediately
-    if (socket.connected) {
-      getRoomInfo();
-    }
+    // if (socket.connected) {
+    //   getRoomInfo();
+    // }
 
     // Connection event
     socket.on("connect", () => {
       console.log("✅ Socket.IO connected:", socket.id);
       // Get room info when connected
-      getRoomInfo();
+      // getRoomInfo();
       socket.on("hello", (message) => {
         console.log("🔌Admin Hello message:", message);
       });

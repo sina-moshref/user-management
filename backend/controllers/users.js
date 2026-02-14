@@ -1,20 +1,50 @@
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
+import { getLastSeenBatch, getOnlineStatusBatch } from "../config/redis.js";
 
 export async function listUsersHandler(request, reply) {
   const users = await User.findAll({
-    attributes: ["id", "email", "role", "createdAt", "lastSeen"],
+    attributes: ["id", "email", "role", "createdAt"],
     order: [["createdAt", "DESC"]],
     raw: false,
   });
+
+  // Get user IDs
+  const userIds = users.map((u) => u.id);
+
+  // Fetch lastSeen and online status from Redis in parallel
+  // Wrap in try-catch to handle Redis connection errors gracefully
+  let lastSeenMap = {};
+  let onlineStatusMap = {};
+  
+  try {
+    [lastSeenMap, onlineStatusMap] = await Promise.all([
+      getLastSeenBatch(userIds),
+      getOnlineStatusBatch(userIds),
+    ]);
+  } catch (error) {
+    console.error("Error fetching lastSeen from Redis:", error.message);
+    // Continue with empty maps - users will show "Never" for lastSeen
+  }
+
   return {
-    users: users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      role: u.role,
-      createdAt: u.createdAt,
-      lastSeen: u.lastSeen,
-    })),
+    users: users.map((u) => {
+      const userId = u.id;
+      const isOnline = onlineStatusMap[userId] || false;
+      const lastSeenTimestamp = lastSeenMap[userId] || null;
+
+      // If user is online, show "online", otherwise show lastSeen timestamp
+      const lastSeen = isOnline ? "online" : lastSeenTimestamp;
+
+      return {
+        id: u.id,
+        email: u.email,
+        role: u.role,
+        createdAt: u.createdAt,
+        lastSeen: lastSeen,
+        isOnline: isOnline,
+      };
+    }),
   };
 }
 

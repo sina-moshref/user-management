@@ -24,12 +24,12 @@ const User = sequelize.define(
       allowNull: false,
       field: "password_hash", // maps to DB column
     },
-    lastSeen: {
-      type: DataTypes.DATE,
-      allowNull: true,
-      field: "last_seen", // maps to DB column
+    // lastSeen: {
+    //   type: DataTypes.DATE,
+    //   allowNull: true,
+    //   field: "last_seen", // maps to DB column
       
-    },
+    // },
     createdAt: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,

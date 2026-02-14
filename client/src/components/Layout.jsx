@@ -1,10 +1,15 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useActivityTracking } from "../hooks/useActivityTracking";
 import styles from "./Layout.module.css";
 
 export default function Layout() {
-  const { user, logout, canAccessMovies, canAccessUsers } = useAuth();
+  const { user, logout, canAccessMovies, canAccessUsers, socket } = useAuth();
   const navigate = useNavigate();
+
+  // Track user activity for lastSeen updates (hybrid approach)
+  // Reduced throttle to 1 second for faster feedback
+  useActivityTracking(socket, { throttleMs: 1000, enabled: !!socket });
 
   const handleLogout = () => {
     logout();

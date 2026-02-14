@@ -10,6 +10,7 @@ import { authRoutes } from "./routes/auth.js";
 import { moviesRoutes } from "./routes/movies.js";
 import { usersRoutes } from "./routes/users.js";
 import User from "./models/User.js";
+import { updateLastSeen, setUserOnline, setUserOffline, getLastSeen } from "./config/redis.js";
 
 const fastify = Fastify({ logger: true });
 
@@ -114,17 +115,7 @@ const start = async () => {
         }
       });
 
-      // Helper function to update lastSeen
-      const updateLastSeen = async (userId, userEmail) => {
-        try {
-          await User.update(
-            { lastSeen: new Date() },
-            { where: { id: userId } }
-          );
-        } catch (error) {
-          console.error("Failed to update lastSeen:", error.message);
-        }
-      };
+      // Note: updateLastSeen, setUserOnline, and setUserOffline are imported from redis.js
 
       // Socket.IO connection handler
       io.on("connection", async (socket) => {
@@ -188,6 +179,17 @@ const start = async () => {
           return memberIds;
         };
 
+        const getOnlineUsersIds = () => { 
+         
+          const onlineUserIds = [];
+          io.sockets.adapter.rooms.forEach((sockets, roomName) => {
+            if (roomName.startsWith("role:")) {
+              onlineUserIds.push(...getRoomMembersIds(roomName));
+            }
+          });
+          return onlineUserIds;
+        }
+
         // Handle request to get room members
         socket.on("get-room-members", (roomName, callback) => {
           const members = getRoomMembers(roomName);
@@ -210,27 +212,69 @@ const start = async () => {
           callback(rooms, onlineUserIds);
         });
 
-        // Update lastSeen when user connects
-        await updateLastSeen(userId, userEmail);
-        
-        // Set up periodic updates (every 30 seconds while connected)
-        const heartbeatInterval = setInterval(async () => {
-          await updateLastSeen(userId, userEmail);
-        }, 60000); // Update every 30 seconds
+        // Mark user as online and update lastSeen in Redis when user connects
+        await setUserOnline(userId);
+        await updateLastSeen(userId);
 
-        io.to("role:admin").emit("online-users", "Hello from the other side");
+        // Store last activity time to throttle updates
+        let lastActivityUpdate = Date.now();
+        const ACTIVITY_THROTTLE_MS = 1000; // Only update every 1 second max for activity (faster feedback)
+
+        // Helper function to update lastSeen and notify admins
+        const updateAndNotify = async (source = "activity") => {
+          await updateLastSeen(userId);
+          const lastSeenTimestamp = new Date().toISOString();
+          console.log(`[${source}] Updating lastSeen for user ${userId} (${userEmail})`);
+          // Emit to admin room AND to the user's own socket for self-updates
+          io.to("role:admin").emit("online-user-id", { userId, lastSeen: lastSeenTimestamp });
+          // Also emit to the user's own socket so they see their own status update
+          socket.emit("lastSeen-update", { userId, lastSeen: lastSeenTimestamp });
+        };
+        
+        // Hybrid approach: Activity-based updates + periodic heartbeat fallback
+        // 1. Handle user activity events (immediate updates)
+        socket.on("user-activity", async () => {
+          const now = Date.now();
+          // Throttle: only update if at least 1 second has passed since last activity update
+          if (now - lastActivityUpdate >= ACTIVITY_THROTTLE_MS) {
+            lastActivityUpdate = now;
+            await updateAndNotify("activity");
+          }
+        });
+
+        // 2. Periodic heartbeat (fallback - every 60 seconds)
+        const heartbeatInterval = setInterval(async () => {
+          await updateAndNotify("heartbeat");
+        }, 60000); // Update every 60 seconds as fallback
+
+        // Store interval reference for cleanup
+        socket.heartbeatInterval = heartbeatInterval;
+
+        // Notify admins that user is online (initial connection)
+        const lastSeenTimestamp = new Date().toISOString();
+        io.to("role:admin").emit("online-user-id", { userId, lastSeen: lastSeenTimestamp });
+        // Also notify the user themselves
+        socket.emit("lastSeen-update", { userId, lastSeen: lastSeenTimestamp });
 
         // Handle disconnection
         socket.on("disconnect", async (reason) => {
           // Clear heartbeat interval
-          clearInterval(heartbeatInterval);
+          if (socket.heartbeatInterval) {
+            clearInterval(socket.heartbeatInterval);
+          }
           
           // Leave role-based room
           socket.leave(roleRoom);
           console.log(`User ${userEmail} left room: ${roleRoom}`);
           
-          // Update lastSeen when user disconnects
-          await updateLastSeen(userId, userEmail);
+          // 3. Update lastSeen on disconnect (final timestamp)
+          await setUserOffline(userId);
+
+          // Get the lastSeen timestamp from Redis before notifying
+          const lastSeenTimestamp = await getLastSeen(userId);
+
+          // Notify admins that user is offline (send user data with lastSeen)
+          io.to("role:admin").emit("offline-user-id", { userId, lastSeen: lastSeenTimestamp });
         });
 
         // Handle errors

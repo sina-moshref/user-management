@@ -23,14 +23,14 @@ export async function loginHandler(request, reply) {
   if (!ok) return reply.code(401).send({ error: "Invalid credentials" });
 
 
-  try {
-    await User.update(
-      { lastSeen: new Date() },
-      { where: { id: user.id } }
-    );
-  } catch (error) {
-    console.error("Failed to update lastSeen on login:", error.message);
-  }
+  // try {
+  //   await User.update(
+  //     { lastSeen: new Date() },
+  //     { where: { id: user.id } }
+  //   );
+  // } catch (error) {
+  //   console.error("Failed to update lastSeen on login:", error.message);
+  // }
 
   const payload = { id: user.id, email, role: user.role };
 
